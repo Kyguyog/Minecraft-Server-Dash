@@ -3,6 +3,15 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const REFRESH_MS = 15000;
 let refreshTimer = null;
+let lastState = null;
+let importCandidates = [];
+
+const filters = {
+  text: "",
+  status: "all",
+  favoritesOnly: false,
+  showWhitelisted: false,
+};
 
 /* ------------------------------------------------------------------ */
 /* API helpers                                                         */
@@ -66,13 +75,42 @@ function renderSummary(data) {
 
 function renderServers(data) {
   const container = $("#servers");
-  $("#server-count").textContent = data.servers.length ? `${data.servers.length} total` : "";
-  $("#empty").classList.toggle("hidden", data.servers.length > 0);
+  const visible = filteredServers(data.servers);
+  const hiddenWhitelist = data.servers.filter((s) => isWhitelistOnly(s)).length;
+  const suffix = hiddenWhitelist && !filters.showWhitelisted ? ` · ${hiddenWhitelist} whitelisted hidden` : "";
+  $("#server-count").textContent = data.servers.length ? `${visible.length}/${data.servers.length} shown${suffix}` : "";
+  $("#empty").classList.toggle("hidden", visible.length > 0);
+  $("#empty").textContent = data.servers.length ? "No servers match these filters." : "No servers yet. Add one above to start monitoring.";
   container.innerHTML = "";
 
-  for (const server of data.servers) {
+  for (const server of visible) {
     container.appendChild(serverCard(server));
   }
+}
+
+function isWhitelistOnly(server) {
+  return server.whitelist && server.whitelist.status === "whitelist_only";
+}
+
+function filteredServers(servers) {
+  const needle = filters.text.trim().toLowerCase();
+  return servers.filter((server) => {
+    const st = server.status || {};
+    if (!filters.showWhitelisted && isWhitelistOnly(server)) return false;
+    if (filters.favoritesOnly && !server.favorite) return false;
+    if (filters.status === "online" && !st.online) return false;
+    if (filters.status === "offline" && st.online) return false;
+    if (!needle) return true;
+    const haystack = [
+      server.name,
+      server.host,
+      server.port,
+      st.version,
+      st.motd,
+      ...(Array.isArray(st.players) ? st.players : []),
+    ].join(" ").toLowerCase();
+    return haystack.includes(needle);
+  });
 }
 
 const WHITELIST_INFO = {
@@ -127,9 +165,12 @@ function serverCard(server) {
           <div class="card-host">${esc(server.host)}:${esc(server.port)}</div>
         </div>
       </div>
-      <span class="pill ${online ? "online" : "offline"}">
-        <span class="dot"></span>${online ? "Online" : "Offline"}
-      </span>
+      <div class="card-status">
+        <button class="favorite-btn ${server.favorite ? "active" : ""}" data-action="favorite" title="${server.favorite ? "Remove favorite" : "Add favorite"}" aria-label="${server.favorite ? "Remove favorite" : "Add favorite"}">${server.favorite ? "★" : "☆"}</button>
+        <span class="pill ${online ? "online" : "offline"}">
+          <span class="dot"></span>${online ? "Online" : "Offline"}
+        </span>
+      </div>
     </div>
     ${motd}
     <div class="metrics">
@@ -161,6 +202,7 @@ function serverCard(server) {
 
   card.querySelector('[data-action="delete"]').addEventListener("click", () => deleteServer(server));
   card.querySelector('[data-action="edit"]').addEventListener("click", () => editServer(server));
+  card.querySelector('[data-action="favorite"]').addEventListener("click", () => toggleFavorite(server));
   card.querySelector('[data-action="whitelist"]').addEventListener("click", (event) => checkWhitelist(server, event.target));
   return card;
 }
@@ -203,6 +245,7 @@ function flashError(message) {
 async function loadState() {
   try {
     const data = await api("GET", "/api/state");
+    lastState = data;
     renderSummary(data);
     renderServers(data);
     renderEvents(data);
@@ -210,6 +253,10 @@ async function loadState() {
   } catch (err) {
     $("#summary").textContent = `Error: ${err.message}`;
   }
+}
+
+function rerenderServers() {
+  if (lastState) renderServers(lastState);
 }
 
 async function deleteServer(server) {
@@ -254,6 +301,82 @@ async function editServer(server) {
   }
 }
 
+async function toggleFavorite(server) {
+  try {
+    await api("PUT", `/api/servers/${server.id}/favorite`, { favorite: !server.favorite });
+    loadState();
+  } catch (err) {
+    alert(`Favorite update failed: ${err.message}`);
+  }
+}
+
+function openImport() {
+  $("#import-modal").classList.remove("hidden");
+  $("#import-text").focus();
+  $("#import-result").textContent = "";
+  $("#import-review").innerHTML = "";
+  $("#btn-add-import").disabled = true;
+}
+
+function closeImport() {
+  $("#import-modal").classList.add("hidden");
+}
+
+async function scanImport() {
+  const text = $("#import-text").value;
+  const result = $("#import-result");
+  result.textContent = "Scanning…";
+  try {
+    const data = await api("POST", "/api/import/preview", { text });
+    importCandidates = data.servers || [];
+    renderImportCandidates();
+    const found = importCandidates.length;
+    const usable = importCandidates.filter((s) => !s.duplicate).length;
+    result.textContent = found ? `${usable}/${found} can be added` : "No server addresses found.";
+  } catch (err) {
+    result.textContent = `Scan failed: ${err.message}`;
+  }
+}
+
+function renderImportCandidates() {
+  const review = $("#import-review");
+  review.innerHTML = "";
+  $("#btn-add-import").disabled = !importCandidates.some((s) => !s.duplicate);
+  if (!importCandidates.length) return;
+  for (const server of importCandidates) {
+    const row = document.createElement("label");
+    row.className = `import-row ${server.duplicate ? "disabled" : ""}`;
+    row.innerHTML = `
+      <input type="checkbox" ${server.duplicate ? "disabled" : "checked"} />
+      <span>
+        <strong>${esc(server.host)}:${esc(server.port)}</strong>
+        ${server.duplicate ? '<em>Already added</em>' : ""}
+      </span>
+    `;
+    review.appendChild(row);
+  }
+}
+
+async function addImportSelection() {
+  const rows = Array.from($("#import-review").querySelectorAll(".import-row"));
+  const selected = importCandidates.filter((_, index) => {
+    const input = rows[index] && rows[index].querySelector("input");
+    return input && input.checked && !input.disabled;
+  });
+  if (!selected.length) return;
+  $("#btn-add-import").disabled = true;
+  $("#import-result").textContent = "Adding…";
+  try {
+    const result = await api("POST", "/api/import", { servers: selected });
+    $("#import-result").textContent = `Added ${result.added}; skipped ${result.skipped}.`;
+    loadState();
+    setTimeout(closeImport, 700);
+  } catch (err) {
+    $("#import-result").textContent = `Import failed: ${err.message}`;
+    $("#btn-add-import").disabled = false;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Settings modal                                                      */
 /* ------------------------------------------------------------------ */
@@ -264,6 +387,7 @@ function openSettings() {
       const ntfy = n.ntfy || {};
       const form = $("#settings-form");
       form.enabled.checked = !!n.enabled;
+      form.favorites_only.checked = !!n.favorites_only;
       form.ntfy_server.value = ntfy.server || "";
       form.ntfy_topic.value = ntfy.topic || "";
       form.ntfy_token.value = ntfy.token || "";
@@ -339,6 +463,7 @@ async function saveSettings(event) {
     poll_interval_seconds: Number(form.poll_interval_seconds.value) || 60,
     notify: {
       enabled: form.enabled.checked,
+      favorites_only: form.favorites_only.checked,
       title_prefix: form.title_prefix.value.trim() || "MC Status",
       ntfy: {
         server: form.ntfy_server.value.trim() || "https://ntfy.sh",
@@ -511,6 +636,10 @@ function wire() {
 
   $("#btn-settings").addEventListener("click", openSettings);
   $("#btn-close-settings").addEventListener("click", closeSettings);
+  $("#btn-open-import").addEventListener("click", openImport);
+  $("#btn-close-import").addEventListener("click", closeImport);
+  $("#btn-scan-import").addEventListener("click", scanImport);
+  $("#btn-add-import").addEventListener("click", addImportSelection);
   $("#btn-signin").addEventListener("click", signIn);
   $("#btn-signout").addEventListener("click", signOut);
   $("#btn-test").addEventListener("click", sendTest);
@@ -520,8 +649,30 @@ function wire() {
   $("#settings-modal").addEventListener("click", (event) => {
     if (event.target.id === "settings-modal") closeSettings();
   });
+  $("#import-modal").addEventListener("click", (event) => {
+    if (event.target.id === "import-modal") closeImport();
+  });
+  $("#filter-text").addEventListener("input", (event) => {
+    filters.text = event.target.value;
+    rerenderServers();
+  });
+  $("#filter-status").addEventListener("change", (event) => {
+    filters.status = event.target.value;
+    rerenderServers();
+  });
+  $("#filter-favorites").addEventListener("change", (event) => {
+    filters.favoritesOnly = event.target.checked;
+    rerenderServers();
+  });
+  $("#filter-whitelisted").addEventListener("change", (event) => {
+    filters.showWhitelisted = event.target.checked;
+    rerenderServers();
+  });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeSettings();
+    if (event.key === "Escape") {
+      closeSettings();
+      closeImport();
+    }
   });
 }
 

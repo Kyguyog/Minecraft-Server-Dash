@@ -29,6 +29,7 @@ DEFAULTS = {
             "server_down": True,
             "server_up": False,
         },
+        "favorites_only": False,
     },
 }
 

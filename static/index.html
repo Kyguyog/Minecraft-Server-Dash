@@ -39,6 +39,9 @@
         </label>
         <button type="submit" class="btn primary">Add</button>
       </form>
+      <div class="add-tools">
+        <button id="btn-open-import" type="button" class="btn ghost">Batch import</button>
+      </div>
       <p id="add-error" class="error"></p>
     </section>
 
@@ -46,6 +49,19 @@
       <div class="panel-head">
         <h2>Servers</h2>
         <span id="server-count" class="muted"></span>
+      </div>
+      <div class="filters">
+        <label class="filter-search">
+          <span>Filter</span>
+          <input id="filter-text" placeholder="Name, host, version, player" />
+        </label>
+        <select id="filter-status" aria-label="Server status">
+          <option value="all">All statuses</option>
+          <option value="online">Online</option>
+          <option value="offline">Offline</option>
+        </select>
+        <label class="switch compact"><input id="filter-favorites" type="checkbox" /><span>Favorites</span></label>
+        <label class="switch compact"><input id="filter-whitelisted" type="checkbox" /><span>Show whitelisted</span></label>
       </div>
       <div id="servers" class="cards"></div>
       <p id="empty" class="empty">No servers yet. Add one above to start monitoring.</p>
@@ -102,6 +118,10 @@
         <label class="switch">
           <input type="checkbox" name="enabled" />
           <span>Enable notifications</span>
+        </label>
+        <label class="switch">
+          <input type="checkbox" name="favorites_only" />
+          <span>Only notify for favorite servers</span>
         </label>
 
         <fieldset>
@@ -165,6 +185,24 @@
           <span id="save-result" class="muted small"></span>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div id="import-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Batch import</h2>
+        <button id="btn-close-import" class="btn ghost small">✕</button>
+      </div>
+      <textarea id="import-text" class="import-text" placeholder="Paste server lists, chat logs, notes, or any wall of text here."></textarea>
+      <div class="modal-actions-top">
+        <button id="btn-scan-import" class="btn primary">Find servers</button>
+        <span id="import-result" class="muted small"></span>
+      </div>
+      <div id="import-review" class="import-review"></div>
+      <div class="modal-actions">
+        <button id="btn-add-import" class="btn primary" disabled>Add selected</button>
+      </div>
     </div>
   </div>
 

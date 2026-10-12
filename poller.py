@@ -122,7 +122,7 @@ class Poller:
         maximum = result.get("players_max")
 
         # Server came online after being down.
-        if is_online and not was_online and self.notifier.notify_on("server_up"):
+        if is_online and not was_online and self._should_notify(server, "server_up"):
             self.db.add_event(server_id, "server_up", None, "server is back online")
             self._notify(self.notifier.server_up(name))
 
@@ -130,7 +130,7 @@ class Poller:
         if not is_online and was_online:
             detail = result.get("error") or "no response"
             self.db.add_event(server_id, "server_down", None, detail)
-            if self.notifier.notify_on("server_down"):
+            if self._should_notify(server, "server_down"):
                 self._notify(self.notifier.server_down(name, detail))
             return
 
@@ -150,11 +150,11 @@ class Poller:
             left = sorted(prev_set - cur_set)
             for player in joined:
                 self.db.add_event(server_id, "join", player, None)
-                if self.notifier.notify_on("join"):
+                if self._should_notify(server, "join"):
                     self._notify(self.notifier.join(name, player, online, maximum))
             for player in left:
                 self.db.add_event(server_id, "leave", player, None)
-                if self.notifier.notify_on("leave"):
+                if self._should_notify(server, "leave"):
                     self._notify(self.notifier.leave(name, player, online, maximum))
             return
 
@@ -164,15 +164,21 @@ class Poller:
                 delta = online - prev_count
                 detail = f"{prev_count} → {online}"
                 self.db.add_event(server_id, "join", None, detail)
-                if self.notifier.notify_on("join"):
+                if self._should_notify(server, "join"):
                     self._notify(self.notifier.join(name, None, online, maximum))
                 if delta > 1:
                     print(f"[poller] {name}: {delta} players joined at once", flush=True)
             elif online < prev_count:
                 detail = f"{prev_count} → {online}"
                 self.db.add_event(server_id, "leave", None, detail)
-                if self.notifier.notify_on("leave"):
+                if self._should_notify(server, "leave"):
                     self._notify(self.notifier.leave(name, None, online, maximum))
+
+    def _should_notify(self, server: dict, event_type: str) -> bool:
+        notify_cfg = self.config.get("notify") or {}
+        if notify_cfg.get("favorites_only") and not server.get("favorite"):
+            return False
+        return self.notifier.notify_on(event_type)
 
     def _notify(self, result: tuple[bool, str]) -> None:
         ok, detail = result

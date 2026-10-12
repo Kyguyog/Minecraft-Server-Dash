@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS servers (
     name       TEXT    NOT NULL,
     host       TEXT    NOT NULL,
     port       INTEGER NOT NULL DEFAULT 25565,
+    favorite   INTEGER NOT NULL DEFAULT 0,
     created_at REAL    NOT NULL
 );
 
@@ -71,6 +72,7 @@ class Database:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         with self._connect() as conn:
             conn.executescript(SCHEMA)
+            self._migrate(conn)
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path, timeout=15, check_same_thread=False)
@@ -79,26 +81,54 @@ class Database:
         conn.execute("PRAGMA foreign_keys=ON;")
         return conn
 
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(servers)").fetchall()}
+        if "favorite" not in columns:
+            conn.execute("ALTER TABLE servers ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0")
+
     # ------------------------------------------------------------------ #
     # Servers
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def normalize_host(host: str) -> str:
+        return (host or "").strip().rstrip(".").lower()
+
+    def server_exists(self, host: str, port: int, exclude_id: int | None = None) -> bool:
+        normalized = self.normalize_host(host)
+        for server in self.list_servers():
+            if exclude_id is not None and server["id"] == exclude_id:
+                continue
+            if self.normalize_host(server["host"]) == normalized and int(server["port"]) == int(port):
+                return True
+        return False
+
     def list_servers(self) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM servers ORDER BY name COLLATE NOCASE, id"
             ).fetchall()
-        return [dict(r) for r in rows]
+        servers = []
+        for row in rows:
+            data = dict(row)
+            data["favorite"] = bool(data.get("favorite"))
+            servers.append(data)
+        return servers
 
     def get_server(self, server_id: int) -> dict | None:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM servers WHERE id = ?", (server_id,)).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        data = dict(row)
+        data["favorite"] = bool(data.get("favorite"))
+        return data
 
-    def add_server(self, name: str, host: str, port: int = 25565) -> dict:
+    def add_server(self, name: str, host: str, port: int = 25565, favorite: bool = False) -> dict:
         with self._connect() as conn:
             cur = conn.execute(
-                "INSERT INTO servers (name, host, port, created_at) VALUES (?, ?, ?, ?)",
-                (name, host, int(port), time.time()),
+                "INSERT INTO servers (name, host, port, favorite, created_at) VALUES (?, ?, ?, ?, ?)",
+                (name, host, int(port), 1 if favorite else 0, time.time()),
             )
             server_id = cur.lastrowid
         return self.get_server(server_id)
@@ -108,6 +138,14 @@ class Database:
             conn.execute(
                 "UPDATE servers SET name = ?, host = ?, port = ? WHERE id = ?",
                 (name, host, int(port), server_id),
+            )
+        return self.get_server(server_id)
+
+    def set_favorite(self, server_id: int, favorite: bool) -> dict | None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE servers SET favorite = ? WHERE id = ?",
+                (1 if favorite else 0, server_id),
             )
         return self.get_server(server_id)
 
@@ -124,7 +162,7 @@ class Database:
     def export_servers(self) -> list[dict]:
         """Return the server list as a plain JSON-friendly structure."""
         return [
-            {"name": s["name"], "host": s["host"], "port": s["port"]}
+            {"name": s["name"], "host": s["host"], "port": s["port"], "favorite": s["favorite"]}
             for s in self.list_servers()
         ]
 
@@ -133,7 +171,7 @@ class Database:
         added = skipped = 0
         if replace:
             self.delete_all_servers()
-        existing = {(s["host"], s["port"]) for s in self.list_servers()}
+        existing = {(self.normalize_host(s["host"]), int(s["port"])) for s in self.list_servers()}
         for item in servers or []:
             if not isinstance(item, dict):
                 skipped += 1
@@ -147,12 +185,13 @@ class Database:
             except (TypeError, ValueError):
                 skipped += 1
                 continue
-            if not (1 <= port <= 65535) or (host, port) in existing:
+            key = (self.normalize_host(host), port)
+            if not (1 <= port <= 65535) or key in existing:
                 skipped += 1
                 continue
             name = (item.get("name") or host).strip()[:80] or host
-            self.add_server(name, host, port)
-            existing.add((host, port))
+            self.add_server(name, host, port, favorite=bool(item.get("favorite")))
+            existing.add(key)
             added += 1
         return {"added": added, "skipped": skipped}
 

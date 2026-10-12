@@ -92,11 +92,27 @@ main {
 
 .add-form { display: flex; gap: 0.7rem; flex-wrap: wrap; align-items: flex-end; }
 .add-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; color: var(--muted); flex: 1 1 180px; }
+.add-tools { display: flex; gap: 0.5rem; margin-top: 0.7rem; }
 .add-form input, .settings-form input {
   background: #0f1318; border: 1px solid var(--border); color: var(--text);
   padding: 0.55rem 0.7rem; border-radius: 9px; font-size: 0.9rem; width: 100%;
 }
 .add-form input:focus, .settings-form input:focus { outline: none; border-color: var(--blue); }
+
+.filters {
+  display: flex; align-items: flex-end; gap: 0.7rem; flex-wrap: wrap;
+  margin: -0.15rem 0 0.9rem;
+}
+.filter-search { display: flex; flex-direction: column; gap: 0.3rem; flex: 1 1 240px; font-size: 0.78rem; color: var(--muted); }
+.filter-search input, .filters select {
+  background: #0f1318; border: 1px solid var(--border); color: var(--text);
+  padding: 0.55rem 0.7rem; border-radius: 9px; font-size: 0.9rem;
+}
+.filter-search input:focus, .filters select:focus { outline: none; border-color: var(--blue); }
+.switch.compact {
+  display: flex; align-items: center; gap: 0.45rem; min-height: 38px;
+  font-size: 0.84rem; color: var(--text);
+}
 
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
 
@@ -114,6 +130,13 @@ main {
 .card-title img.favicon { width: 30px; height: 30px; border-radius: 6px; image-rendering: pixelated; background: #0f1318; }
 .card-name { font-weight: 600; font-size: 0.98rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-host { color: var(--muted); font-size: 0.74rem; font-family: ui-monospace, monospace; }
+.card-status { display: flex; gap: 0.45rem; align-items: center; flex-shrink: 0; }
+.favorite-btn {
+  appearance: none; border: 1px solid var(--border); background: #0f1318; color: var(--muted);
+  width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 1rem; line-height: 1;
+}
+.favorite-btn:hover { border-color: rgba(224,168,61,0.7); color: #ffe1a8; }
+.favorite-btn.active { color: #ffe1a8; background: rgba(224,168,61,0.13); border-color: rgba(224,168,61,0.5); }
 
 .motd { color: #cdd6df; font-size: 0.84rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .motd.offline-text { color: var(--muted); font-style: italic; }
@@ -178,6 +201,24 @@ legend { color: var(--muted); font-size: 0.76rem; text-transform: uppercase; let
 .settings-form a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .backup-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.2rem; }
 
+.import-text {
+  width: 100%; min-height: 180px; resize: vertical; background: #0f1318;
+  border: 1px solid var(--border); color: var(--text); border-radius: 9px;
+  padding: 0.7rem; font: 0.9rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.import-text:focus { outline: none; border-color: var(--blue); }
+.import-review { display: grid; gap: 0.45rem; max-height: 260px; overflow: auto; }
+.import-row {
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.65rem;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px;
+}
+.import-row span { display: flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap; min-width: 0; }
+.import-row strong { font-family: ui-monospace, monospace; font-size: 0.86rem; overflow-wrap: anywhere; }
+.import-row em { color: var(--muted); font-size: 0.78rem; font-style: normal; }
+.import-row.disabled { opacity: 0.62; }
+
 @media (max-width: 560px) {
   .topbar { flex-direction: column; align-items: flex-start; }
+  .card-top, .card-foot { flex-direction: column; align-items: flex-start; }
+  .card-actions { flex-wrap: wrap; }
 }

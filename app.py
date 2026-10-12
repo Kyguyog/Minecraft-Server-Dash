@@ -109,6 +109,11 @@ def validate_server_payload(payload: dict, require_all: bool = True) -> dict:
     return {"name": name or host, "host": host, "port": port}
 
 
+def ensure_unique_server(host: str, port: int, exclude_id: int | None = None) -> None:
+    if DB.server_exists(host, port, exclude_id=exclude_id):
+        raise ApiError(409, "server already exists")
+
+
 # --------------------------------------------------------------------------- #
 # Route handlers
 # --------------------------------------------------------------------------- #
@@ -177,7 +182,8 @@ def api_list_servers(query: dict) -> dict:
 
 def api_add_server(payload: dict) -> dict:
     data = validate_server_payload(payload)
-    server = DB.add_server(data["name"], data["host"], data["port"])
+    ensure_unique_server(data["host"], data["port"])
+    server = DB.add_server(data["name"], data["host"], data["port"], favorite=bool(payload.get("favorite")))
     POLLER.trigger()
     return {"server": server_with_status(CONFIG, server)}
 
@@ -186,8 +192,16 @@ def api_update_server(payload: dict, server_id: int) -> dict:
     if DB.get_server(server_id) is None:
         raise ApiError(404, "server not found")
     data = validate_server_payload(payload)
+    ensure_unique_server(data["host"], data["port"], exclude_id=server_id)
     server = DB.update_server(server_id, data["name"], data["host"], data["port"])
     POLLER.trigger()
+    return {"server": server_with_status(CONFIG, server)}
+
+
+def api_favorite_server(payload: dict, server_id: int) -> dict:
+    if DB.get_server(server_id) is None:
+        raise ApiError(404, "server not found")
+    server = DB.set_favorite(server_id, bool(payload.get("favorite")))
     return {"server": server_with_status(CONFIG, server)}
 
 
@@ -249,6 +263,40 @@ def api_ping_one(payload: dict) -> dict:
 
     result = mcping.ping(data["host"], data["port"], timeout=POLLER.timeout)
     return {"result": result}
+
+
+def api_preview_import(payload: dict) -> dict:
+    text = payload.get("text") or ""
+    if not isinstance(text, str):
+        raise ApiError(400, "text must be a string")
+    candidates = parse_server_addresses(text)
+    out = []
+    seen = set()
+    for item in candidates:
+        key = (DB.normalize_host(item["host"]), item["port"])
+        if key in seen:
+            continue
+        seen.add(key)
+        item["duplicate"] = DB.server_exists(item["host"], item["port"])
+        out.append(item)
+    return {"servers": out}
+
+
+def parse_server_addresses(text: str) -> list[dict]:
+    import re
+
+    host_part = r"(?:[a-zA-Z0-9][a-zA-Z0-9-]{0,62}\.)+[a-zA-Z]{2,63}|(?:\d{1,3}\.){3}\d{1,3}|localhost"
+    pattern = re.compile(rf"(?<![\w.-])({host_part})(?::(\d{{1,5}}))?(?![\w.-])")
+    servers = []
+    for match in pattern.finditer(text):
+        host = match.group(1)
+        port_raw = match.group(2)
+        port = int(port_raw) if port_raw else 25565
+        if not (1 <= port <= 65535):
+            continue
+        if all(part.isdigit() and 0 <= int(part) <= 255 for part in host.split(".")) or not host.replace(".", "").isdigit():
+            servers.append({"name": host, "host": host, "port": port})
+    return servers
 
 
 def api_check_whitelist(payload: dict, server_id: int) -> dict:
@@ -328,6 +376,7 @@ ROUTES = [
     ("PUT", "/api/config", lambda q, p: api_update_config(p)),
     ("POST", "/api/test-notify", lambda q, p: api_test_notify(p)),
     ("POST", "/api/ping", lambda q, p: api_ping_one(p)),
+    ("POST", "/api/import/preview", lambda q, p: api_preview_import(p)),
     ("POST", "/api/poll", lambda q, p: api_poll(p)),
     ("POST", "/api/backup", lambda q, p: api_backup(p)),
     ("GET", "/api/backups", lambda q, p: api_list_backups(q)),
@@ -338,6 +387,7 @@ ROUTES = [
     ("GET", "/api/auth/poll", lambda q, p: api_auth_poll(p)),
     ("POST", "/api/auth/logout", lambda q, p: api_auth_logout(p)),
     ("PUT", "/api/servers/(\\d+)", lambda q, p, m: api_update_server(p, int(m.group(1)))),
+    ("PUT", "/api/servers/(\\d+)/favorite", lambda q, p, m: api_favorite_server(p, int(m.group(1)))),
     ("DELETE", "/api/servers/(\\d+)", lambda q, p, m: api_delete_server(p, int(m.group(1)))),
     ("POST", "/api/servers/(\\d+)/whitelist", lambda q, p, m: api_check_whitelist(p, int(m.group(1)))),
 ]

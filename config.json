@@ -26,6 +26,7 @@
       "leave": true,
       "server_down": false,
       "server_up": false
-    }
+    },
+    "favorites_only": false
   }
 }
