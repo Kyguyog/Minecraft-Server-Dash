@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0f1216" />
+  <title>Minecraft Server Status</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%233fbf6b'/%3E%3Cpath d='M14 40h36v10H14z' fill='%235c3b26'/%3E%3Cpath d='M18 16h28v22H18z' fill='%23e7f7ec'/%3E%3C/svg%3E" />
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">⛏</span>
+      <div>
+        <h1>Minecraft Server Status</h1>
+        <p id="summary" class="summary">Loading…</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="poller-pill" class="pill subtle" title="Background poller">–</span>
+      <button id="btn-poll" class="btn">Poll now</button>
+      <button id="btn-settings" class="btn ghost">Settings</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel add-panel">
+      <h2>Add a server</h2>
+      <form id="add-form" class="add-form" autocomplete="off">
+        <label>
+          <span>Name</span>
+          <input name="name" placeholder="My SMP" maxlength="80" />
+        </label>
+        <label>
+          <span>Host</span>
+          <input name="host" placeholder="play.example.com or play.example.com:25565" required />
+        </label>
+        <button type="submit" class="btn primary">Add</button>
+      </form>
+      <p id="add-error" class="error"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Servers</h2>
+        <span id="server-count" class="muted"></span>
+      </div>
+      <div id="servers" class="cards"></div>
+      <p id="empty" class="empty">No servers yet. Add one above to start monitoring.</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Recent activity</h2>
+        <button id="btn-clear-events" class="btn ghost small">Refresh</button>
+      </div>
+      <ul id="events" class="events"></ul>
+    </section>
+  </main>
+
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Notifications &amp; settings</h2>
+        <button id="btn-close-settings" class="btn ghost small">✕</button>
+      </div>
+      <p class="muted small">
+        Alerts are delivered to your iPhone through ntfy. Install the free
+        <strong>ntfy</strong> app and subscribe to the topic below, then tap
+        “Send test”. To make notifications come entirely from your own server,
+        point “ntfy server” at a self-hosted ntfy instance.
+      </p>
+      <div class="modal-actions-top">
+        <button id="btn-test" class="btn primary">Send test notification</button>
+        <span id="test-result" class="muted small"></span>
+      </div>
+      <form id="settings-form" class="settings-form">
+        <fieldset id="account-fieldset">
+          <legend>Minecraft account</legend>
+          <p class="muted small">
+            Sign in so the whitelist check can complete the encrypted login on
+            <strong>online-mode</strong> servers too. No password is stored — you
+            authorize once via Microsoft's device-code page.
+          </p>
+          <p id="account-status" class="account-status">Not signed in.</p>
+          <div class="modal-actions-top">
+            <button type="button" id="btn-signin" class="btn primary">Sign in with Microsoft</button>
+            <button type="button" id="btn-signout" class="btn ghost hidden">Sign out</button>
+          </div>
+          <div id="device-box" class="device-box hidden">
+            <p class="small">
+              Open <a id="device-uri" href="#" target="_blank" rel="noopener">microsoft.com/link</a>
+              and enter this code:
+            </p>
+            <p class="device-code" id="device-code"></p>
+            <p class="muted small" id="device-status">Waiting for authorization…</p>
+          </div>
+        </fieldset>
+
+        <label class="switch">
+          <input type="checkbox" name="enabled" />
+          <span>Enable notifications</span>
+        </label>
+
+        <fieldset>
+          <legend>ntfy</legend>
+          <label>
+            <span>ntfy server</span>
+            <input name="ntfy_server" placeholder="https://ntfy.sh" />
+          </label>
+          <label>
+            <span>Topic</span>
+            <input name="ntfy_topic" placeholder="KyguyMCList" />
+          </label>
+          <label>
+            <span>Access token (optional)</span>
+            <input name="ntfy_token" placeholder="tk_…" />
+          </label>
+          <label>
+            <span>Notification title prefix</span>
+            <input name="title_prefix" placeholder="MC Status" />
+          </label>
+          <label>
+            <span>Tap-through URL (optional)</span>
+            <input name="click_url" placeholder="http://your-host:8080" />
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Notify me when</legend>
+          <label class="switch"><input type="checkbox" name="on_join" /><span>Someone joins</span></label>
+          <label class="switch"><input type="checkbox" name="on_leave" /><span>Someone leaves</span></label>
+          <label class="switch"><input type="checkbox" name="on_server_down" /><span>A server goes offline</span></label>
+          <label class="switch"><input type="checkbox" name="on_server_up" /><span>A server comes back online</span></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Poller</legend>
+          <label>
+            <span>Check interval (seconds)</span>
+            <input name="poll_interval_seconds" type="number" min="10" max="3600" />
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Backups &amp; data</legend>
+          <p class="muted small">
+            Your server list is backed up automatically to
+            <code>data/backups/</code> on startup and every
+            <span id="backup-interval">24</span>&nbsp;hours. Old copies are
+            pruned automatically.
+          </p>
+          <div class="modal-actions-top">
+            <button type="button" id="btn-backup" class="btn">Back up now</button>
+            <a id="btn-export" class="btn ghost" href="/api/export" download="mc-servers.json">Export servers</a>
+            <span id="backup-result" class="muted small"></span>
+          </div>
+          <ul id="backup-list" class="backup-list muted small"></ul>
+        </fieldset>
+
+        <div class="modal-actions">
+          <button type="submit" class="btn primary">Save</button>
+          <span id="save-result" class="muted small"></span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

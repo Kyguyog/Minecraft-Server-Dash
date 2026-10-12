@@ -1,0 +1,31 @@
+{
+  "dashboard": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "poll_interval_seconds": 60,
+  "request_timeout_seconds": 5,
+  "prune_after_days": 14,
+  "click_url": "",
+  "backups": {
+    "enabled": true,
+    "keep": 30,
+    "interval_hours": 24
+  },
+  "notify": {
+    "enabled": true,
+    "provider": "ntfy",
+    "title_prefix": "MC Status",
+    "ntfy": {
+      "server": "https://ntfy.sh",
+      "topic": "KyguyMCList",
+      "token": ""
+    },
+    "notify_on": {
+      "join": true,
+      "leave": false,
+      "server_down": true,
+      "server_up": false
+    }
+  }
+}

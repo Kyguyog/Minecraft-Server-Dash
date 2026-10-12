@@ -1,0 +1,3 @@
+# Only needed for checking *online-mode* servers (encrypted login probe).
+# Everything else runs on the Python standard library.
+cryptography>=41.0
