@@ -25,9 +25,9 @@ DEFAULTS = {
         },
         "notify_on": {
             "join": True,
-            "leave": False,
+            "leave": True,
             "server_down": True,
-            "server_up": False,
+            "server_up": True,
         },
     },
 }
