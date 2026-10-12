@@ -3,7 +3,7 @@
     "host": "0.0.0.0",
     "port": 8080
   },
-  "poll_interval_seconds": 60,
+  "poll_interval_seconds": 120,
   "request_timeout_seconds": 5,
   "prune_after_days": 14,
   "click_url": "",
@@ -23,8 +23,8 @@
     },
     "notify_on": {
       "join": true,
-      "leave": false,
-      "server_down": true,
+      "leave": true,
+      "server_down": false,
       "server_up": false
     }
   }
